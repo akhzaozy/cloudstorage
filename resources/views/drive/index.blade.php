@@ -115,8 +115,8 @@
                             <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
                         </div>
                         <div>
-                            <h2 class="text-2xl font-bold gradient-text">My Drive Akhza Ozy</h2>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Manage your files & folderss</p>
+                            <h2 class="text-2xl font-bold gradient-text">My Drive DUARR</h2>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Manage your files & foldersssss</p>
                         </div>
                     </div>
 
