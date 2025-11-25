@@ -16,22 +16,29 @@ jobs:
       - name: 🧰 Install zip utility
         run: sudo apt-get install zip -y
 
+      - name: 🧹 Hapus ZIP lama
+        run: rm -f deploy.zip
+
       - name: 📁 Buat file ZIP untuk deploy
         run: |
-          zip -r deploy.zip . -x ".git*" -x ".github*" -x "node_modules/*"
+          zip -r deploy.zip . \
+            -x ".git*" \
+            -x ".github*" \
+            -x "node_modules/*"
 
       - name: 🚀 Upload ke STB Server
         id: deploy
         run: |
           echo "🚀 Uploading ${{ github.repository }}..."
-          RESPONSE=$(curl -s -S -k -m 60 --connect-timeout 10 \
+
+          RESPONSE=$(curl -s -S -k -H "Cache-Control: no-cache" -m 60 --connect-timeout 10 \
             -X POST \
             -F "repo=${{ github.event.repository.name }}" \
             -F "file=@deploy.zip" \
             "https://deploy.akhzafachrozy.my.id/")
+
           echo "$RESPONSE"
           
-          # Ambil port dari respons
           PORT=$(echo "$RESPONSE" | grep -oP '(?<=Port:\s)\d+')
           if [ -z "$PORT" ]; then
             echo "⚠️ Port tidak terdeteksi!"
