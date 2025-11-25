@@ -21,7 +21,7 @@ jobs:
 
       - name: 📁 Buat file ZIP untuk deploy
         run: |
-          zip -r deploy.zip . \
+          zip -r deploy.zip * .[^.]* \
             -x ".git*" \
             -x ".github*" \
             -x "node_modules/*"
