@@ -116,7 +116,7 @@
                         </div>
                         <div>
                             <h2 class="text-2xl font-bold gradient-text">My Drive</h2>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Manage your files & folders</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Manage your files & folderss</p>
                         </div>
                     </div>
 
