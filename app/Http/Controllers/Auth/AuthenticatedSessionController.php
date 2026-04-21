@@ -4,43 +4,56 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Auth; // Tambahkan ini
+use Illuminate\Validation\ValidationException;
 
 class AuthenticatedSessionController extends Controller
 {
+    /**
+     * Tampilkan halaman login.
+     */
     public function create()
     {
         return view('auth.login');
     }
 
+    /**
+     * Proses login ke MariaDB Lokal.
+     */
     public function store(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required'
+        // 1. Validasi Input
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
         ]);
 
-        $res = Http::withHeaders([
-            'apikey' => env('SUPABASE_KEY'),
-            'Content-Type' => 'application/json',
-        ])->post(env('SUPABASE_URL') . '/auth/v1/token?grant_type=password', [
-            'email' => $request->email,
-            'password' => $request->password
-        ]);
+        // 2. Coba login via MariaDB (Eloquent Auth)
+        // 'remember' kita set false biar simpel dulu
+        if (Auth::attempt($credentials, $request->boolean('remember'))) {
+            // Jika berhasil, buat ulang session biar aman
+            $request->session()->regenerate();
 
-        if ($res->failed()) {
-            return back()->withErrors(['email' => 'Email atau password salah']);
+            // Redirect ke halaman drive/dashboard
+            return redirect()->intended('/drive');
         }
 
-        $data = $res->json();
-        session(['supabase_user' => $data['user'], 'supabase_token' => $data['access_token']]);
-
-        return redirect('/drive'); // FIX DI SINI
+        // 3. Jika gagal, lempar error balik ke form login
+        throw ValidationException::withMessages([
+            'email' => ['Email atau password yang kamu masukkan salah.'],
+        ]);
     }
 
+    /**
+     * Logout dari sistem.
+     */
     public function destroy(Request $request)
     {
-        session()->flush();
+        Auth::logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
         return redirect('/login');
     }
 }
