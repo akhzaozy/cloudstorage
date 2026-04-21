@@ -5,12 +5,12 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use App\Models\DriveItem; // Pastikan Model ini sudah dibuat
+use App\Models\DriveItem;
 use Carbon\Carbon;
 
 class DriveController extends Controller
 {
-    // Kita hapus property Supabase yang bikin error tadi
+    // [FIX] Properti Supabase dihapus total agar tidak menyebabkan TypeError lagi
 
     public function index(Request $request)
     {
