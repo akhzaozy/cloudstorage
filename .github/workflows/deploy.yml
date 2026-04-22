@@ -1,6 +1,11 @@
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  AutoDeploy v2 — GitHub Actions Workflow                     ║
+# ║  AutoDeploy v2.2 — GitHub Actions Workflow (STB Armbian Fix) ║
 # ║  Target: deployv2.akhzafachrozy.my.id                        ║
+# ╠══════════════════════════════════════════════════════════════╣
+# ║  CHANGELOG v2.2                                              ║
+# ║  [FIX-6] ZIP sekarang include dotfiles (.env.example, dll)   ║
+# ║  [FIX-6] Output summary menampilkan info permission          ║
+# ║  [FIX-7] Exclude .env dari ZIP (dibuat manual via SSH)       ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 name: 🚀 AutoDeploy v2
@@ -100,19 +105,48 @@ jobs:
       - name: ⬇️ Checkout
         uses: actions/checkout@v4
 
-      - name: 📦 Create deployment ZIP
+      # ──────────────────────────────────────────────
+      # [FIX-7] Buat ZIP dengan dotfiles tersertakan.
+      #
+      # Catatan penting:
+      #   • .env.example  → DISERTAKAN dalam ZIP agar mahasiswa punya template
+      #   • .env          → DIKECUALIKAN dari ZIP (berisi secret, dibuat manual via SSH)
+      #   • .htaccess     → DISERTAKAN (dotfile yang dibutuhkan web server)
+      #   • vendor/       → DIKECUALIKAN (berat, diinstall via composer di server)
+      #   • node_modules/ → DIKECUALIKAN (berat, diinstall via npm di server)
+      #   • storage/*.log → DIKECUALIKAN (log runtime, tidak perlu di-deploy)
+      #
+      # Perintah `zip` secara default MELEWATKAN dotfiles di beberapa implementasi.
+      # Solusi: gunakan `find` + `zip` untuk memastikan semua file (termasuk dotfiles)
+      # masuk ke dalam arsip.
+      # ──────────────────────────────────────────────
+      - name: 📦 Create deployment ZIP (with dotfiles)
         run: |
-          EXCLUDES=( ".git/*" ".github/*" "node_modules/*" "vendor/*" "storage/*.log" ".env*" "deploy.zip" )
-          EX_FLAGS=()
-          for ex in "${EXCLUDES[@]}"; do EX_FLAGS+=("--exclude=$ex"); done
-          
-          zip -r deploy.zip . "${EX_FLAGS[@]}" -q
+          # Kumpulkan semua file termasuk dotfiles menggunakan find,
+          # lalu pipe hasilnya ke zip. Ini memastikan .env.example, .htaccess,
+          # dan dotfiles lain tidak terlewat.
+          find . \
+            -not -path "./.git/*" \
+            -not -path "./.github/*" \
+            -not -path "./node_modules/*" \
+            -not -path "./vendor/*" \
+            -not -name ".env" \
+            -not -name "deploy.zip" \
+            -not -name "*.log" \
+            | zip deploy.zip -@ -q
+
+          # Verifikasi dotfiles penting tersertakan dalam ZIP
+          echo "--- Verifikasi dotfiles dalam ZIP ---"
+          unzip -l deploy.zip | grep '^\.' || echo "(tidak ada dotfile di root, mungkin dalam subfolder)"
+          unzip -l deploy.zip | grep -E '\.env\.example|\.htaccess|\.gitignore' || echo "(dotfile spesifik tidak ditemukan — pastikan file ada di repo)"
+
           echo "zip_size=$(du -sh deploy.zip | cut -f1)" >> "$GITHUB_ENV"
+          echo "✅ ZIP berhasil dibuat: $(du -sh deploy.zip | cut -f1)"
 
       - name: 🌐 Send to deploy endpoint
         id: request
         run: |
-          # Kirim file ke AutoDeploy v2
+          # Kirim file ke AutoDeploy v2.2
           # Menggunakan key 'autodeploy-classroom' agar mahasiswa tidak perlu setting secret key
           RESPONSE=$(curl -s -X POST \
             -H "User-Agent: GitHub-Actions-AutoDeploy-v2" \
@@ -137,7 +171,7 @@ jobs:
       - name: 📊 Parse ADPL Results
         if: always()
         run: |
-          # Parsing data dari prefix ADPL: yang ada di skrip PHP kamu
+          # Parsing data dari prefix ADPL: yang ada di skrip PHP
           echo "P_DOMAIN=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:domain=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
           echo "P_PORT=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:port=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
           echo "P_SSH_USER=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:ssh_user=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
@@ -145,28 +179,31 @@ jobs:
           echo "P_SSH_CMD=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:ssh_cmd=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
           echo "P_SERVICE=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:service=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
           echo "P_WEB_STATUS=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:web_status=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
+          echo "P_FILE_OWNER=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:file_owner=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
 
       - name: 📝 Job Summary
         if: always()
         run: |
           # Membuat tampilan dashboard di GitHub Actions
           if [[ "${{ env.status }}" == "success" ]]; then
-            ICON="✅"; COLOR="green"
+            ICON="✅"; STATUS_LABEL="Berhasil"
           else
-            ICON="❌"; COLOR="red"
+            ICON="❌"; STATUS_LABEL="Gagal"
           fi
 
           cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          # ${ICON} AutoDeploy v2 - $REPO_SLUG
+          # ${ICON} AutoDeploy v2.2 — $REPO_SLUG
 
           | Info | Detail |
           | :--- | :--- |
           | **Domain** | [${{ env.P_DOMAIN }}](${{ env.P_DOMAIN }}) |
           | **App Type** | \`$APP_TYPE\` |
-          | **Status** | ${{ env.P_WEB_STATUS }} |
+          | **Web Status** | ${{ env.P_WEB_STATUS }} |
           | **Port** | \`${{ env.P_PORT }}\` |
           | **SSH User** | \`${{ env.P_SSH_USER }}\` |
           | **Service** | \`${{ env.P_SERVICE }}\` |
+          | **File Owner** | \`${{ env.P_FILE_OWNER }}\` |
+          | **ZIP Size** | \`${{ env.zip_size }}\` |
 
           ## 💻 Akses SSH
           \`\`\`bash
@@ -174,17 +211,25 @@ jobs:
           # Password: ${{ env.P_SSH_PASS }}
           \`\`\`
 
+          ## 🔐 Informasi Permission (v2.2)
+          > Semua file di-set ke **\`www:www\`** (folder: 775, file: 664).
+          > SSH user **\`${{ env.P_SSH_USER }}\`** sudah ditambahkan ke group **\`www\`**
+          > sehingga bisa membaca dan menulis file tanpa `sudo`.
+          > File `.env` di-set **640** untuk keamanan (tidak bisa dibaca oleh *other*).
+
           $( [[ "$APP_TYPE" == "laravel" ]] && echo "
           ## 📋 Laravel Next Steps
           1. SSH ke server dengan perintah di atas.
           2. \`cd /www/wwwroot/hosting/$REPO_SLUG\`
-          3. \`composer install --no-dev --optimize-autoloader\`
+          3. \`$COMPOSER install --no-dev --optimize-autoloader\`
           4. \`cp .env.example .env && nano .env\`
           5. \`php artisan key:generate && php artisan migrate --force\`
-          6. \`sudo systemctl restart ${{ env.P_SERVICE }}\`
-          ")
+          6. \`php artisan storage:link\`
+          7. \`sudo chown -R www:www . && sudo find storage -type d -exec chmod 775 {} +\`
+          8. \`sudo systemctl restart ${{ env.P_SERVICE }}\`
+          " )
 
-          <details><summary>Lihat Log Raw Server</summary>
+          <details><summary>📄 Lihat Log Raw Server</summary>
 
           \`\`\`text
           ${{ env.RAW_RESPONSE }}
