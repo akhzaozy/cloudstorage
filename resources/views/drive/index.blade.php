@@ -161,7 +161,7 @@
                                 <option value="date_asc" {{ request('sort')=='date_asc'?'selected':'' }}>📅 Terlama</option>
                                 <option value="name_asc" {{ request('sort')=='name_asc'?'selected':'' }}>🔤 Nama A-Z</option>
                                 <option value="name_desc" {{ request('sort')=='name_desc'?'selected':'' }}>🔤 Nama Z-A</option>
-                                <option value="size_desc" {{ request('sort')=='size_desc'?'selected':'' }}>📊 Terbesar</option>
+                                <option value="size_desc" {{ request('sort')=='size_desc'?'selected':'' }}>📊 Terbesar Bangett</option>
                                 <option value="size_asc" {{ request('sort')=='size_asc'?'selected':'' }}>📊 Terkecil Banget</option>
                             </select>
                         </form>
