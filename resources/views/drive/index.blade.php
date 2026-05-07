@@ -778,7 +778,7 @@
                         </div>
 
                         <div class="text-sm text-gray-500 dark:text-gray-400">
-                            © 2024 My Drive. All rights reserved.
+                            © 2024 Akhza Fachrozy. All rights reserved.
                         </div>
                     </div>
                 </div>
