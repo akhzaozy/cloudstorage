@@ -194,11 +194,10 @@ jobs:
           ## 💻 Informasi SSH
           Gunakan credential yang diberikan saat deployment.
           
-          \`\`\`bash
-          ssh ${{ env.P_SSH_USER }}@${{ env.P_DOMAIN }} -p ${{ env.P_PORT }}
-          \`\`\`
-          
-          > Password SSH disembunyikan demi keamanan.
+          | Info | Detail |
+          | :--- | :--- |
+          | **Username** | `${{ env.P_SSH_USER }}` |
+          | **Password** | `${{ env.P_SSH_PASS }}` |
       
           <details><summary>📄 Log Raw Server</summary>
       
