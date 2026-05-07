@@ -1,20 +1,18 @@
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  AutoDeploy v2.2 — GitHub Actions Workflow (STB Armbian Fix) ║
-# ║  Target: deployv2.akhzafachrozy.my.id                        ║
+# ║  AutoDeploy SI ITK — GitHub Actions Workflow                 ║
 # ╠══════════════════════════════════════════════════════════════╣
-# ║  CHANGELOG v2.2                                              ║
-# ║  [FIX-6] ZIP sekarang include dotfiles (.env.example, dll)   ║
-# ║  [FIX-6] Output summary menampilkan info permission          ║
-# ║  [FIX-7] Exclude .env dari ZIP (dibuat manual via SSH)       ║
-# ╚══════════════════════════════════════════════════════════════╝
 
 name: 🚀 AutoDeploy v2
 
 on:
+  pull_request:
+    branches:
+      - main
+
   push:
     branches:
       - main
-      - master
+      
     paths-ignore:
       - '**.md'
       - '.github/**'
@@ -49,6 +47,7 @@ jobs:
       app_type:    ${{ steps.detect.outputs.app_type }}
       repo_slug:   ${{ steps.slug.outputs.repo_slug }}
       deploy_mode: ${{ steps.mode.outputs.deploy_mode }}
+      has_npm:     ${{ steps.detect.outputs.has_npm }}
 
     steps:
       - name: ⬇️ Checkout
@@ -57,7 +56,6 @@ jobs:
       - name: 🏷️ Generate repo slug
         id: slug
         run: |
-          # Mengubah nama repo GitHub menjadi format yang aman untuk linux user/folder
           SLUG=$(echo "${{ github.event.repository.name }}" \
             | tr '[:upper:]' '[:lower:]' \
             | sed 's/[^a-z0-9-]/-/g' \
@@ -70,8 +68,16 @@ jobs:
         run: |
           if [[ -f "artisan" && -f "composer.json" ]]; then
             echo "app_type=laravel" >> "$GITHUB_OUTPUT"
+          elif [[ -f "composer.json" ]]; then
+            echo "app_type=php-composer" >> "$GITHUB_OUTPUT"
           else
             echo "app_type=php-native" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [[ -f "package.json" ]]; then
+            echo "has_npm=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_npm=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 📋 Set deploy mode
@@ -85,7 +91,6 @@ jobs:
 
       - name: 🧪 PHP syntax lint
         run: |
-          # Cek syntax error sebelum kirim ke server
           find . -name "*.php" ! -path "./vendor/*" -exec php -l {} \; | grep "Errors parsing" && exit 1 || echo "✅ Syntax OK"
 
   # ──────────────────────────────────────────────────────
@@ -98,6 +103,7 @@ jobs:
     env:
       REPO_SLUG:   ${{ needs.detect.outputs.repo_slug }}
       APP_TYPE:    ${{ needs.detect.outputs.app_type }}
+      HAS_NPM:     ${{ needs.detect.outputs.has_npm }}
       DEPLOY_MODE: ${{ needs.detect.outputs.deploy_mode }}
       DEPLOY_URL:  https://deployv2.akhzafachrozy.my.id
 
@@ -105,26 +111,8 @@ jobs:
       - name: ⬇️ Checkout
         uses: actions/checkout@v4
 
-      # ──────────────────────────────────────────────
-      # [FIX-7] Buat ZIP dengan dotfiles tersertakan.
-      #
-      # Catatan penting:
-      #   • .env.example  → DISERTAKAN dalam ZIP agar mahasiswa punya template
-      #   • .env          → DIKECUALIKAN dari ZIP (berisi secret, dibuat manual via SSH)
-      #   • .htaccess     → DISERTAKAN (dotfile yang dibutuhkan web server)
-      #   • vendor/       → DIKECUALIKAN (berat, diinstall via composer di server)
-      #   • node_modules/ → DIKECUALIKAN (berat, diinstall via npm di server)
-      #   • storage/*.log → DIKECUALIKAN (log runtime, tidak perlu di-deploy)
-      #
-      # Perintah `zip` secara default MELEWATKAN dotfiles di beberapa implementasi.
-      # Solusi: gunakan `find` + `zip` untuk memastikan semua file (termasuk dotfiles)
-      # masuk ke dalam arsip.
-      # ──────────────────────────────────────────────
       - name: 📦 Create deployment ZIP (with dotfiles)
         run: |
-          # Kumpulkan semua file termasuk dotfiles menggunakan find,
-          # lalu pipe hasilnya ke zip. Ini memastikan .env.example, .htaccess,
-          # dan dotfiles lain tidak terlewat.
           find . \
             -not -path "./.git/*" \
             -not -path "./.github/*" \
@@ -135,10 +123,8 @@ jobs:
             -not -name "*.log" \
             | zip deploy.zip -@ -q
 
-          # Verifikasi dotfiles penting tersertakan dalam ZIP
           echo "--- Verifikasi dotfiles dalam ZIP ---"
-          unzip -l deploy.zip | grep '^\.' || echo "(tidak ada dotfile di root, mungkin dalam subfolder)"
-          unzip -l deploy.zip | grep -E '\.env\.example|\.htaccess|\.gitignore' || echo "(dotfile spesifik tidak ditemukan — pastikan file ada di repo)"
+          unzip -l deploy.zip | grep -E '\.env\.example|\.htaccess|\.gitignore' || echo "(dotfile spesifik tidak ditemukan)"
 
           echo "zip_size=$(du -sh deploy.zip | cut -f1)" >> "$GITHUB_ENV"
           echo "✅ ZIP berhasil dibuat: $(du -sh deploy.zip | cut -f1)"
@@ -146,8 +132,6 @@ jobs:
       - name: 🌐 Send to deploy endpoint
         id: request
         run: |
-          # Kirim file ke AutoDeploy v2.2
-          # Menggunakan key 'autodeploy-classroom' agar mahasiswa tidak perlu setting secret key
           RESPONSE=$(curl -s -X POST \
             -H "User-Agent: GitHub-Actions-AutoDeploy-v2" \
             -F "key=autodeploy-classroom" \
@@ -171,7 +155,6 @@ jobs:
       - name: 📊 Parse ADPL Results
         if: always()
         run: |
-          # Parsing data dari prefix ADPL: yang ada di skrip PHP
           echo "P_DOMAIN=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:domain=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
           echo "P_PORT=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:port=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
           echo "P_SSH_USER=$(echo "${{ env.RAW_RESPONSE }}" | grep '^ADPL:ssh_user=' | cut -d'=' -f2-)" >> "$GITHUB_ENV"
@@ -184,15 +167,24 @@ jobs:
       - name: 📝 Job Summary
         if: always()
         run: |
-          # Membuat tampilan dashboard di GitHub Actions
           if [[ "${{ env.status }}" == "success" ]]; then
             ICON="✅"; STATUS_LABEL="Berhasil"
           else
             ICON="❌"; STATUS_LABEL="Gagal"
           fi
 
-          cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          # ${ICON} AutoDeploy v2.2 — $REPO_SLUG
+          # Tentukan PHP binary path
+          PHP_BIN="/www/server/php/83/bin/php"
+          COMPOSER_BIN="/usr/local/bin/composer"
+
+          cat >> "$GITHUB_STEP_SUMMARY" << SUMMARY_EOF
+          # ${ICON} AutoDeploy v2.3 — \`$REPO_SLUG\`
+
+          > Deploy ${STATUS_LABEL} pada \`$(date '+%Y-%m-%d %H:%M:%S') UTC\`
+
+          ---
+
+          ## 🌐 Informasi Deployment
 
           | Info | Detail |
           | :--- | :--- |
@@ -201,44 +193,236 @@ jobs:
           | **Web Status** | ${{ env.P_WEB_STATUS }} |
           | **Port** | \`${{ env.P_PORT }}\` |
           | **SSH User** | \`${{ env.P_SSH_USER }}\` |
+          | **SSH Pass** | \`${{ env.P_SSH_PASS }}\` |
           | **Service** | \`${{ env.P_SERVICE }}\` |
-          | **File Owner** | \`${{ env.P_FILE_OWNER }}\` |
           | **ZIP Size** | \`${{ env.zip_size }}\` |
 
-          ## 💻 Akses SSH
-          \`\`\`bash
+          ---
+
+          ## 💻 Langkah 1 — Install cloudflared (sekali saja)
+
+          > SSH ke server menggunakan Cloudflare Tunnel. Kamu perlu install \`cloudflared\` terlebih dahulu.
+
+          ### 🪟 Windows
+          1. Download file \`cloudflaredclient.bat\` dari folder yang dibagikan dosen
+          2. **Klik kanan** → **Run as administrator**
+          3. Tunggu hingga muncul **"BERHASIL!"**
+
+          > Jika muncul *"Windows protected your PC"*, klik **More info** → **Run anyway**
+
+          ### 🍎 macOS
+          ```bash
+          brew install cloudflare/cloudflare/cloudflared
+          ```
+          > Belum punya Homebrew? Install dulu: https://brew.sh
+
+          ### 🐧 Linux
+          ```bash
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared && sudo mv cloudflared /usr/local/bin/
+          ```
+
+          ---
+
+          ## 🔑 Langkah 2 — Login SSH ke Server
+
+          ### 🪟 Windows
+          1. Download file \`ssh.bat\` dari folder yang dibagikan dosen
+          2. **Klik kanan** → **Run as administrator**
+          3. Masukkan username & password di bawah saat diminta
+
+          ### 🍎 macOS / 🐧 Linux
+          ```bash
           ${{ env.P_SSH_CMD }}
-          # Password: ${{ env.P_SSH_PASS }}
+          ```
+          > Password: \`${{ env.P_SSH_PASS }}\`
+
+          Jika diminta *"Are you sure you want to continue connecting?"* — ketik \`yes\` lalu Enter.
+
+          ---
+
+          ## 📂 Langkah 3 — Masuk ke Direktori Project
+
+          Setelah berhasil SSH, kamu langsung berada di home directory. Pindah ke folder project:
+
+          ```bash
+          cd /www/wwwroot/hosting/$REPO_SLUG
+          ls -la
+          ```
+
+          > Semua file kode kamu sudah ada di sini. Dari direktori ini semua perintah selanjutnya dijalankan.
+
+          ---
+          $( if [[ "$APP_TYPE" == "laravel" ]]; then
+          cat << LARAVEL_EOF
+
+          ## ⚙️ Langkah 4 — Setup Laravel
+
+          ### 4a. Install dependencies Composer
+          \`\`\`bash
+          ${PHP_BIN} ${COMPOSER_BIN} install --no-dev --optimize-autoloader
           \`\`\`
 
-          ## 🔐 Informasi Permission (v2.2)
-          > Semua file di-set ke **\`www:www\`** (folder: 775, file: 664).
-          > SSH user **\`${{ env.P_SSH_USER }}\`** sudah ditambahkan ke group **\`www\`**
-          > sehingga bisa membaca dan menulis file tanpa `sudo`.
-          > File `.env` di-set **640** untuk keamanan (tidak bisa dibaca oleh *other*).
+          $( if [[ "$HAS_NPM" == "true" ]]; then
+          echo '### 4b. Install dependencies NPM & build assets'
+          echo '```bash'
+          echo 'npm install'
+          echo 'npm run build'
+          echo '```'
+          fi )
 
-          $( [[ "$APP_TYPE" == "laravel" ]] && echo "
-          ## 📋 Laravel Next Steps
-          1. SSH ke server dengan perintah di atas.
-          2. \`cd /www/wwwroot/hosting/$REPO_SLUG\`
-          3. \`$COMPOSER install --no-dev --optimize-autoloader\`
-          4. \`cp .env.example .env && nano .env\`
-          5. \`php artisan key:generate && php artisan migrate --force\`
-          6. \`php artisan storage:link\`
-          7. \`sudo chown -R www:www . && sudo find storage -type d -exec chmod 775 {} +\`
-          8. \`sudo systemctl restart ${{ env.P_SERVICE }}\`
-          " )
+          ### 4c. Salin & edit file .env
+          \`\`\`bash
+          cp .env.example .env
+          nano .env
+          \`\`\`
 
-          <details><summary>📄 Lihat Log Raw Server</summary>
+          Isi konfigurasi berikut di file \`.env\`:
+          \`\`\`env
+          APP_KEY=               # akan diisi otomatis langkah 4d
+          APP_URL=https://$REPO_SLUG.akhzafachrozy.my.id
+          APP_ENV=production
+          APP_DEBUG=false
+
+          DB_CONNECTION=mysql
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_DATABASE=deploysiitk
+          DB_USERNAME=deploysiitk
+          DB_PASSWORD=deploysiitk2026
+          \`\`\`
+
+          > Simpan file: tekan **Ctrl+X** → **Y** → **Enter**
+
+          ### 4d. Generate APP_KEY
+          \`\`\`bash
+          ${PHP_BIN} artisan key:generate
+          \`\`\`
+
+          ### 4e. Jalankan migrasi database
+          \`\`\`bash
+          ${PHP_BIN} artisan migrate --force
+          \`\`\`
+
+          ### 4f. Buat symlink storage
+          \`\`\`bash
+          ${PHP_BIN} artisan storage:link
+          \`\`\`
+
+          ### 4g. Fix permission & restart service
+          \`\`\`bash
+          sudo fix-perm-$REPO_SLUG
+          sudo systemctl restart ${{ env.P_SERVICE }}
+          \`\`\`
+
+          ### 4h. Verifikasi service berjalan
+          \`\`\`bash
+          sudo systemctl status ${{ env.P_SERVICE }}
+          \`\`\`
+
+          LARAVEL_EOF
+          elif [[ "$APP_TYPE" == "php-composer" ]]; then
+          cat << COMPOSER_EOF
+
+          ## ⚙️ Langkah 4 — Install Dependencies
+
+          \`\`\`bash
+          ${PHP_BIN} ${COMPOSER_BIN} install --no-dev --optimize-autoloader
+          \`\`\`
+
+          $( if [[ "$HAS_NPM" == "true" ]]; then
+          echo '```bash'
+          echo 'npm install && npm run build'
+          echo '```'
+          fi )
+
+          Lalu fix permission & restart:
+          \`\`\`bash
+          sudo fix-perm-$REPO_SLUG
+          sudo systemctl restart ${{ env.P_SERVICE }}
+          \`\`\`
+
+          COMPOSER_EOF
+          else
+          cat << NATIVE_EOF
+
+          ## ⚙️ Langkah 4 — Konfigurasi Aplikasi
+
+          $( if [[ "$HAS_NPM" == "true" ]]; then
+          echo '### Install & build aset'
+          echo '```bash'
+          echo 'npm install && npm run build'
+          echo '```'
+          fi )
+
+          Fix permission & restart service:
+          \`\`\`bash
+          sudo fix-perm-$REPO_SLUG
+          sudo systemctl restart ${{ env.P_SERVICE }}
+          \`\`\`
+
+          NATIVE_EOF
+          fi )
+
+          ---
+
+          ## 🎉 Langkah 5 — Cek Web Kamu
+
+          Buka di browser: [${{ env.P_DOMAIN }}](${{ env.P_DOMAIN }})
+
+          ---
+
+          ## 🔄 Update Kode Selanjutnya
+
+          Cukup push ke GitHub — deploy berjalan otomatis:
+          ```bash
+          git add .
+          git commit -m "update"
+          git push origin main
+          ```
+
+          File yang **tidak ditimpa** saat update: \`.env\`, \`storage/\`, \`vendor/\`, \`database/database.sqlite\`
+
+          Jika ada migrasi baru, jalankan via SSH:
+          ```bash
+          ${PHP_BIN} artisan migrate --force
+          ```
+
+          ---
+
+          ## 🛠 Perintah Berguna
+
+          ```bash
+          # Lihat status service
+          sudo systemctl status ${{ env.P_SERVICE }}
+
+          # Restart service
+          sudo systemctl restart ${{ env.P_SERVICE }}
+
+          # Fix permission
+          sudo fix-perm-$REPO_SLUG
+
+          # Lihat log aplikasi (live)
+          tail -f /var/log/autodeploy/$REPO_SLUG-app.log
+
+          # Lihat log systemd (live)
+          sudo journalctl -u ${{ env.P_SERVICE }} -f
+          ```
+
+          ---
+
+          <details><summary>📄 Log Raw Server</summary>
 
           \`\`\`text
           ${{ env.RAW_RESPONSE }}
           \`\`\`
+
           </details>
-          EOF
+
+          SUMMARY_EOF
 
   # ──────────────────────────────────────────────────────
-  #  JOB 3: NOTIFY (Optional)
+  #  JOB 3: NOTIFY
   # ──────────────────────────────────────────────────────
   notify:
     name: 📣 Notification
