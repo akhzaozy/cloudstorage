@@ -187,20 +187,18 @@ jobs:
       
           Silakan ikuti panduan lengkap deployment di repository berikut:
       
-          👉 https://github.com/akhzaozy/deploy/blob/main/README.md
+          👉 https://github.com/akhzaozy/deploy/
       
           ---
       
           ## 💻 Informasi SSH
-      
+          Gunakan credential yang diberikan saat deployment.
+          
           \`\`\`bash
-          ${{ env.P_SSH_CMD }}
+          ssh ${{ env.P_SSH_USER }}@${{ env.P_DOMAIN }} -p ${{ env.P_PORT }}
           \`\`\`
-      
-          Password:
-          \`${{ env.P_SSH_PASS }}\`
-      
-          ---
+          
+          > Password SSH disembunyikan demi keamanan.
       
           <details><summary>📄 Log Raw Server</summary>
       
