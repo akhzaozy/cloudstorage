@@ -116,7 +116,7 @@
                         </div>
                         <div>
                             <h2 class="text-2xl font-bold gradient-text">CloudStorage Akhza Fachrozy</h2>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">Manage your files & foldersssss</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">Manage your files & folders</p>
                         </div>
                     </div>
 
